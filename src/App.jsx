@@ -5,7 +5,7 @@ import {
   Bell, BookMarked, Clock, CalendarDays, Flame, Trash2, Eye, EyeOff, KeyRound,
   MessageCircle, Send, FileDown, Printer, LineChart as LineChartIcon, Home, Camera,
   Stethoscope, FlaskConical, Moon, Target, ChevronDown, Pencil, UserX, Settings, PieChart, Apple, Search, BookOpenCheck,
-  Droplet, Wind, Gauge, Ruler, Scale, Layers, Receipt,
+  Droplet, Wind, Gauge, Ruler, Scale, Layers, Receipt, Menu as MenuIcon,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import {
@@ -314,6 +314,18 @@ const CUESTIONARIO_DEFAULT = [
   { id: "q-actividad", texto: "¿Qué tan seguido haces actividad física?" },
   { id: "q-objetivo", texto: "¿Cuál es tu objetivo principal?" },
 ];
+
+/** Hook simple para detectar pantallas angostas (tablet/celular) y adaptar el layout */
+function useIsNarrow(breakpoint = 1000) {
+  const [narrow, setNarrow] = useState(() => (typeof window !== "undefined" ? window.innerWidth < breakpoint : false));
+  useEffect(() => {
+    const onResize = () => setNarrow(window.innerWidth < breakpoint);
+    window.addEventListener("resize", onResize);
+    onResize();
+    return () => window.removeEventListener("resize", onResize);
+  }, [breakpoint]);
+  return narrow;
+}
 
 function interpolarPlantilla(texto, vars) {
   return (texto || "").replace(/\{(\w+)\}/g, (_, key) => (vars[key] !== undefined && vars[key] !== null ? vars[key] : ""));
@@ -1169,6 +1181,10 @@ function Shell({ user, onLogout, tabs, active, setActive, children, busqueda, se
   const inicioTab = tabs.find((t) => t.key === "inicio");
   const searchRef = useRef(null);
   const [grupoAbierto, setGrupoAbierto] = useState(active === "pacientes");
+  const narrow = useIsNarrow(1000);
+  const [menuAbierto, setMenuAbierto] = useState(false);
+
+  useEffect(() => { if (narrow) setMenuAbierto(false); }, [active, narrow]);
 
   useEffect(() => {
     if (active === "pacientes") setGrupoAbierto(true);
@@ -1257,10 +1273,21 @@ function Shell({ user, onLogout, tabs, active, setActive, children, busqueda, se
   };
 
   return (
-    <div style={{ display: "flex", minHeight: "100%" }}>
+    <div style={{ display: "flex", minHeight: "100%", position: "relative", overflowX: "hidden" }}>
+      {narrow && menuAbierto && (
+        <div
+          onClick={() => setMenuAbierto(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 40 }}
+        />
+      )}
       <aside style={{
         width: 240, background: T.surface, borderRight: `1px solid ${T.line}`, padding: "20px 0", display: "flex",
         flexDirection: "column", flexShrink: 0,
+        ...(narrow ? {
+          position: "fixed", top: 0, bottom: 0, left: 0, zIndex: 50, height: "100%",
+          transform: menuAbierto ? "translateX(0)" : "translateX(-100%)",
+          transition: "transform 0.2s ease", boxShadow: menuAbierto ? "4px 0 16px rgba(0,0,0,0.15)" : "none",
+        } : {}),
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 18px", marginBottom: 22 }}>
           <img src={LOGO_ICONO} alt="NutryEasy" style={{ width: 36, height: 36, objectFit: "contain", flexShrink: 0 }} />
@@ -1299,24 +1326,35 @@ function Shell({ user, onLogout, tabs, active, setActive, children, busqueda, se
 
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         <header style={{
-          display: "flex", alignItems: "center", gap: 14, padding: "14px 28px",
+          display: "flex", alignItems: "center", gap: narrow ? 8 : 14, padding: narrow ? "12px 14px" : "14px 28px",
           background: T.surface, borderBottom: `1px solid ${T.line}`, flexShrink: 0,
         }}>
-          <div style={{ position: "relative", flex: 1, maxWidth: 380 }}>
+          {narrow && (
+            <button
+              onClick={() => setMenuAbierto((v) => !v)}
+              style={{ background: "none", border: "none", cursor: "pointer", color: T.ink, padding: 6, flexShrink: 0 }}
+              aria-label="Menú"
+            >
+              <MenuIcon size={22} />
+            </button>
+          )}
+          <div style={{ position: "relative", flex: 1, maxWidth: narrow ? "none" : 380, minWidth: 0 }}>
             <Search size={15} color={T.inkSoft} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
             <input
               ref={searchRef}
               value={busqueda}
               onChange={(e) => { setBusqueda(e.target.value); setActive("pacientes"); }}
               placeholder="Buscar paciente…"
-              style={{ ...inputStyle, paddingLeft: 34, paddingRight: 56 }}
+              style={{ ...inputStyle, paddingLeft: 34, paddingRight: narrow ? 12 : 56 }}
             />
-            <span style={{
-              position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
-              fontSize: 10.5, color: T.inkSoft, border: `1px solid ${T.line}`, borderRadius: 4, padding: "1px 5px",
-            }}>
-              Ctrl K
-            </span>
+            {!narrow && (
+              <span style={{
+                position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+                fontSize: 10.5, color: T.inkSoft, border: `1px solid ${T.line}`, borderRadius: 4, padding: "1px 5px",
+              }}>
+                Ctrl K
+              </span>
+            )}
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
@@ -1362,7 +1400,7 @@ function Shell({ user, onLogout, tabs, active, setActive, children, busqueda, se
           );
         })()}
 
-        <main style={{ flex: 1, padding: 32, overflow: "auto", background: T.bg }}>{children}</main>
+        <main style={{ flex: 1, padding: narrow ? 16 : 32, overflow: "auto", background: T.bg, minWidth: 0 }}>{children}</main>
       </div>
     </div>
   );
@@ -1648,6 +1686,7 @@ function PatientList({ user, onOpen, busqueda, setBusqueda, abrirFormExterno }) 
    Nutriólogo: detalle de paciente (Expediente + Dietocálculo)
 --------------------------------------------------------- */
 function PatientDetail({ patientUsername, onBack, nutriUser, initialTab, onTabChange }) {
+  const narrow = useIsNarrow(1000);
   const [tab, setTabInternal] = useState(initialTab || "expediente");
   const setTab = (k) => { setTabInternal(k); onTabChange && onTabChange(k); };
   useEffect(() => { if (initialTab) setTabInternal(initialTab); }, [initialTab]);
@@ -1867,7 +1906,7 @@ function PatientDetail({ patientUsername, onBack, nutriUser, initialTab, onTabCh
             <Button onClick={saveExpediente}>{saved ? <><Check size={15} /> Guardado</> : <><Plus size={15} /> Nueva evaluación</>}</Button>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "2.1fr 1fr", gap: 18, alignItems: "start" }}>
+          <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr" : "2.1fr 1fr", gap: 18, alignItems: "start" }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
               <NumberedCard
                 numero={1} icon={ClipboardList} titulo="Historia clínica"
@@ -2150,7 +2189,7 @@ function PatientDetail({ patientUsername, onBack, nutriUser, initialTab, onTabCh
               <WeightChart historial={exp.historial} talla={exp.talla} />
             </Card>
           ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "2.3fr 1fr", gap: 18, alignItems: "start" }}>
+          <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr" : "2.3fr 1fr", gap: 18, alignItems: "start" }}>
             <div>
               <div style={{ fontFamily: "Fraunces, serif", fontSize: 16, fontWeight: 600, marginBottom: 12, color: T.ink }}>Composición corporal</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 12, marginBottom: 26 }}>
@@ -4038,6 +4077,7 @@ function QuickCard({ icon: Icon, label, color, onClick }) {
 }
 
 function HomeDashboard({ user, onNavigate }) {
+  const narrow = useIsNarrow(1000);
   const hoy = new Date().toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const [proximasCitas, setProximasCitas] = useState([]);
   const [plantillas, setPlantillas] = useState(PLANTILLAS_WHATSAPP_DEFAULT);
@@ -4231,7 +4271,7 @@ function HomeDashboard({ user, onNavigate }) {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "260px 1fr 260px", gap: 16, alignItems: "start" }}>
+      <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr" : "260px 1fr 260px", gap: 16, alignItems: "start" }}>
         {/* Columna izquierda: pacientes recientes */}
         <Card style={{ padding: 16 }}>
           <div style={{ fontFamily: "Fraunces, serif", fontSize: 15, fontWeight: 600, marginBottom: 10 }}>Pacientes recientes</div>
