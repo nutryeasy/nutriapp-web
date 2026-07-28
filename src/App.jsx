@@ -772,7 +772,7 @@ function NumberedCard({ numero, icon: Icon, titulo, editing, onToggleEdit, campo
             {visibles.map((c) => (
               <div key={c.key} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13 }}>
                 <span style={{ color: T.inkSoft, flexShrink: 0 }}>{c.label}</span>
-                <span style={{ color: T.ink, fontWeight: 500, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: c.type === "textarea" ? "normal" : "nowrap" }}>
+                <span style={{ color: T.ink, fontWeight: 500, textAlign: "right", whiteSpace: "normal", wordBreak: "break-word", maxWidth: "60%" }}>
                   {c.format ? c.format(values[c.key]) : (values[c.key] || "—")}
                 </span>
               </div>
@@ -1181,7 +1181,7 @@ function Shell({ user, onLogout, tabs, active, setActive, children, busqueda, se
   const inicioTab = tabs.find((t) => t.key === "inicio");
   const searchRef = useRef(null);
   const [grupoAbierto, setGrupoAbierto] = useState(active === "pacientes");
-  const narrow = useIsNarrow(1000);
+  const narrow = useIsNarrow(1180);
   const [menuAbierto, setMenuAbierto] = useState(false);
 
   useEffect(() => { if (narrow) setMenuAbierto(false); }, [active, narrow]);
@@ -1686,7 +1686,7 @@ function PatientList({ user, onOpen, busqueda, setBusqueda, abrirFormExterno }) 
    Nutriólogo: detalle de paciente (Expediente + Dietocálculo)
 --------------------------------------------------------- */
 function PatientDetail({ patientUsername, onBack, nutriUser, initialTab, onTabChange }) {
-  const narrow = useIsNarrow(1000);
+  const narrow = useIsNarrow(1180);
   const [tab, setTabInternal] = useState(initialTab || "expediente");
   const setTab = (k) => { setTabInternal(k); onTabChange && onTabChange(k); };
   useEffect(() => { if (initialTab) setTabInternal(initialTab); }, [initialTab]);
@@ -4077,7 +4077,7 @@ function QuickCard({ icon: Icon, label, color, onClick }) {
 }
 
 function HomeDashboard({ user, onNavigate }) {
-  const narrow = useIsNarrow(1000);
+  const narrow = useIsNarrow(1180);
   const hoy = new Date().toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const [proximasCitas, setProximasCitas] = useState([]);
   const [plantillas, setPlantillas] = useState(PLANTILLAS_WHATSAPP_DEFAULT);
