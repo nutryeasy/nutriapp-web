@@ -768,13 +768,13 @@ function NumberedCard({ numero, icon: Icon, titulo, editing, onToggleEdit, campo
         </div>
       ) : (
         <>
-          <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
             {visibles.map((c) => (
-              <div key={c.key} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13 }}>
-                <span style={{ color: T.inkSoft, flexShrink: 0 }}>{c.label}</span>
-                <span style={{ color: T.ink, fontWeight: 500, textAlign: "right", whiteSpace: "normal", wordBreak: "break-word", maxWidth: "60%" }}>
+              <div key={c.key} style={{ fontSize: 13 }}>
+                <div style={{ color: T.inkSoft, fontSize: 11.5, marginBottom: 2 }}>{c.label}</div>
+                <div style={{ color: T.ink, fontWeight: 500, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
                   {c.format ? c.format(values[c.key]) : (values[c.key] || "—")}
-                </span>
+                </div>
               </div>
             ))}
           </div>
