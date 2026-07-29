@@ -306,6 +306,19 @@ const PLANTILLAS_WHATSAPP_DEFAULT = {
   mensajeGeneral: "Hola {nombre}, te escribo de parte de {nutriologo} para tu seguimiento nutricional. 🥗",
 };
 
+const REGLAS_RECORDATORIO_DEFAULT = [
+  {
+    id: "regla-1dia", nombre: "Recordatorio 1 día antes", activo: true,
+    disparador: "antes_cita", horasAntes: 24,
+    mensaje: "Hola {nombre}, te recordamos tu cita de nutrición mañana {fecha} a las {hora}, con {nutriologo}. ¡Te esperamos! 🥗",
+  },
+  {
+    id: "regla-2h", nombre: "Recordatorio 2 horas antes", activo: true,
+    disparador: "antes_cita", horasAntes: 2,
+    mensaje: "Hola {nombre}, tu cita de nutrición es en 2 horas ({hora}). ¡Nos vemos pronto! 🥗",
+  },
+];
+
 const CUESTIONARIO_DEFAULT = [
   { id: "q-motivo", texto: "¿Cuál es el motivo principal de tu consulta?" },
   { id: "q-antecedentes", texto: "¿Tienes algún antecedente médico familiar relevante (diabetes, hipertensión, obesidad)?" },
@@ -3627,14 +3640,42 @@ function ConfiguracionCuenta({ user, onUpdateUser }) {
 
   const [respaldando, setRespaldando] = useState(false);
 
+  const [reglas, setReglas] = useState([]);
+  const [savedReglas, setSavedReglas] = useState(false);
+
   useEffect(() => {
     (async () => {
       const plant = await sGet(`plantillasWhatsapp:${user.username}`);
       if (plant) setPlantillas({ ...PLANTILLAS_WHATSAPP_DEFAULT, ...plant });
       const preg = await sGet(`cuestionario:${user.username}`);
       setPreguntas(preg && preg.length ? preg : CUESTIONARIO_DEFAULT);
+      const r = await sGet(`reglasRecordatorio:${user.username}`);
+      setReglas(r && r.length ? r : REGLAS_RECORDATORIO_DEFAULT);
     })();
   }, [user.username]);
+
+  const guardarReglas = async (nuevasReglas) => {
+    setReglas(nuevasReglas);
+    await sSet(`reglasRecordatorio:${user.username}`, nuevasReglas);
+    setSavedReglas(true);
+    setTimeout(() => setSavedReglas(false), 1600);
+  };
+
+  const agregarRegla = () => {
+    guardarReglas([...reglas, {
+      id: `regla-${Date.now()}`, nombre: "Nueva regla", activo: true,
+      disparador: "antes_cita", horasAntes: 24,
+      mensaje: "Hola {nombre}, te recordamos tu cita el {fecha} a las {hora}, con {nutriologo}.",
+    }]);
+  };
+
+  const actualizarRegla = (id, cambios) => {
+    setReglas((prev) => prev.map((r) => (r.id === id ? { ...r, ...cambios } : r)));
+  };
+
+  const eliminarRegla = (id) => {
+    guardarReglas(reglas.filter((r) => r.id !== id));
+  };
 
   const guardarNombre = async () => {
     if (!name.trim()) return;
@@ -3804,6 +3845,66 @@ function ConfiguracionCuenta({ user, onUpdateUser }) {
             />
           </Field>
           <Button onClick={guardarPlantillas}>{savedPlant ? <><Check size={15} /> Guardado</> : "Guardar plantillas"}</Button>
+        </Card>
+
+        <Card style={{ gridColumn: "1 / -1" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+            <div style={{ fontFamily: "Fraunces, serif", fontSize: 16, fontWeight: 600 }}>Recordatorios automáticos por WhatsApp</div>
+            <Button variant="ghost" onClick={agregarRegla}><Plus size={14} /> Nueva regla</Button>
+          </div>
+          <p style={{ fontSize: 12, color: T.inkSoft, marginTop: 0, marginBottom: 16 }}>
+            Estas reglas se envían solas, sin que nadie tenga que abrir WhatsApp — pero solo funcionan una vez que conectes tu número de WhatsApp Business (ve la guía abajo). Variables: <code style={{ background: T.bg, padding: "1px 5px", borderRadius: 4 }}>{"{nombre}"}</code> <code style={{ background: T.bg, padding: "1px 5px", borderRadius: 4 }}>{"{fecha}"}</code> <code style={{ background: T.bg, padding: "1px 5px", borderRadius: 4 }}>{"{hora}"}</code> <code style={{ background: T.bg, padding: "1px 5px", borderRadius: 4 }}>{"{nutriologo}"}</code>
+          </p>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {reglas.map((r) => (
+              <div key={r.id} style={{ border: `1px solid ${T.line}`, borderRadius: 12, padding: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+                  <input
+                    style={{ ...inputStyle, flex: "1 1 200px", fontWeight: 600 }}
+                    value={r.nombre}
+                    onChange={(e) => actualizarRegla(r.id, { nombre: e.target.value })}
+                  />
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: T.inkSoft, whiteSpace: "nowrap" }}>
+                    <input type="checkbox" checked={r.activo} onChange={(e) => actualizarRegla(r.id, { activo: e.target.checked })} />
+                    Activa
+                  </label>
+                  <button onClick={() => eliminarRegla(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: T.accent2 }}>
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, fontSize: 13 }}>
+                  <span style={{ color: T.inkSoft }}>Enviar</span>
+                  <input
+                    type="number"
+                    style={{ ...inputStyle, width: 70 }}
+                    value={r.horasAntes}
+                    onChange={(e) => actualizarRegla(r.id, { horasAntes: Number(e.target.value) })}
+                  />
+                  <span style={{ color: T.inkSoft }}>horas antes de cada cita</span>
+                </div>
+                <textarea
+                  style={{ ...inputStyle, minHeight: 56, resize: "vertical" }}
+                  value={r.mensaje}
+                  onChange={(e) => actualizarRegla(r.id, { mensaje: e.target.value })}
+                />
+              </div>
+            ))}
+          </div>
+          <Button onClick={() => guardarReglas(reglas)} style={{ marginTop: 14 }}>
+            {savedReglas ? <><Check size={15} /> Guardado</> : "Guardar reglas"}
+          </Button>
+
+          <details style={{ marginTop: 18, fontSize: 12.5, color: T.inkSoft }}>
+            <summary style={{ cursor: "pointer", fontWeight: 600, color: T.ink }}>¿Cómo activo el envío automático de verdad?</summary>
+            <ol style={{ marginTop: 10, paddingLeft: 18, lineHeight: 1.7 }}>
+              <li>Crea una cuenta en <strong>business.facebook.com</strong> y una app en <strong>developers.facebook.com</strong> con el producto "WhatsApp" agregado.</li>
+              <li>Obtén tu <strong>número de WhatsApp Business</strong> (puedes empezar con el número de prueba gratis de Meta) y al menos una <strong>plantilla de mensaje aprobada</strong>.</li>
+              <li>En tu proyecto de Vercel → Settings → Environment Variables, agrega: <code>WHATSAPP_TOKEN</code>, <code>WHATSAPP_PHONE_NUMBER_ID</code>, <code>WHATSAPP_TEMPLATE_NAME</code>, <code>CRON_SECRET</code> (esta última la inventas tú, cualquier texto largo random) y <code>SUPABASE_SERVICE_KEY</code>.</li>
+              <li>Ve a <strong>cron-job.org</strong> (gratis) → crea una cuenta → "Create cronjob" → pega esta URL: <code>https://tu-proyecto.vercel.app/api/enviar-recordatorios?secret=TU_CRON_SECRET</code> → intervalo cada 15 minutos.</li>
+              <li>Listo — a partir de ahí, tus reglas de arriba se revisan solas cada 15 minutos y se mandan sin que nadie abra WhatsApp.</li>
+            </ol>
+          </details>
         </Card>
 
         <Card>
