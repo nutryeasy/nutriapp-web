@@ -108,8 +108,9 @@ export default async function handler(req, res) {
     for (const llave of llavesPacientes) {
       const nutriUsername = llave.replace("patients:", "");
       const reglas = (await sbGet(`reglasRecordatorio:${nutriUsername}`)) || [];
-      const activas = reglas.filter((r) => r.activo && r.disparador === "antes_cita" && r.horasAntes);
-      if (activas.length === 0) continue;
+      const reglasAntesCita = reglas.filter((r) => r.activo && r.disparador === "antes_cita" && r.horasAntes);
+      const reglasInactividad = reglas.filter((r) => r.activo && r.disparador === "inactividad" && r.diasSinAsistir);
+      if (reglasAntesCita.length === 0 && reglasInactividad.length === 0) continue;
 
       const citas = (await sbGet(`citas:${nutriUsername}`)) || [];
       const nutri = users[nutriUsername];
@@ -119,7 +120,7 @@ export default async function handler(req, res) {
         const fechaHoraCita = new Date(`${cita.fecha}T${cita.hora}:00`);
         if (isNaN(fechaHoraCita.getTime())) continue;
 
-        for (const regla of activas) {
+        for (const regla of reglasAntesCita) {
           const objetivo = new Date(fechaHoraCita.getTime() - Number(regla.horasAntes) * 60 * 60 * 1000);
           const diffMin = Math.abs((Date.now() - objetivo.getTime()) / 60000);
           if (diffMin > 15) continue; // fuera de la ventana de esta corrida (cron cada 15 min)
@@ -141,6 +142,42 @@ export default async function handler(req, res) {
             resultados.push({ paciente: cita.patientName, regla: regla.nombre, cita: `${cita.fecha} ${cita.hora}` });
           } else {
             errores.push({ paciente: cita.patientName, regla: regla.nombre, error: envio.data });
+          }
+        }
+      }
+
+      // Reglas por inactividad: se revisan una vez por semana por paciente
+      if (reglasInactividad.length > 0) {
+        const pacientesUsernames = (await sbGet(llave)) || [];
+        const hoy = new Date();
+        const yyyy = hoy.getUTCFullYear();
+        const semanaISO = `${yyyy}-S${Math.ceil((((hoy - new Date(Date.UTC(yyyy, 0, 1))) / 86400000) + new Date(Date.UTC(yyyy, 0, 1)).getUTCDay() + 1) / 7)}`;
+
+        for (const pacienteUsername of pacientesUsernames) {
+          const citasDelPaciente = citas.filter((c) => c.patientUsername === pacienteUsername && c.estado !== "cancelada" && new Date(`${c.fecha}T${c.hora || "00:00"}:00`) <= hoy);
+          if (citasDelPaciente.length === 0) continue; // sin visitas previas, no hay "inactividad" que medir
+          const ultima = citasDelPaciente.sort((a, b) => (b.fecha + b.hora).localeCompare(a.fecha + a.hora))[0];
+          const diasSinVenir = Math.floor((hoy - new Date(`${ultima.fecha}T${ultima.hora}:00`)) / 86400000);
+
+          for (const regla of reglasInactividad) {
+            if (diasSinVenir < Number(regla.diasSinAsistir)) continue;
+
+            const dedupeKey = `recordatorioInactividad:${nutriUsername}:${pacienteUsername}:${regla.id}:${semanaISO}`;
+            const yaEnviado = await sbGet(dedupeKey);
+            if (yaEnviado) continue;
+
+            const mensaje = interpolar(regla.mensaje, {
+              nombre: (ultima.patientName || "").split(" ")[0],
+              nutriologo: nutri?.name || "",
+            });
+
+            const envio = await enviarWhatsApp(pacienteUsername, mensaje);
+            if (envio.ok) {
+              await sbSet(dedupeKey, { enviado: true, fecha: new Date().toISOString() });
+              resultados.push({ paciente: ultima.patientName, regla: regla.nombre, diasSinVenir });
+            } else {
+              errores.push({ paciente: ultima.patientName, regla: regla.nombre, error: envio.data });
+            }
           }
         }
       }
