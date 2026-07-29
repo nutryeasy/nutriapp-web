@@ -1518,6 +1518,10 @@ function PatientList({ user, onOpen, busqueda, setBusqueda, abrirFormExterno }) 
   const [editing, setEditing] = useState(null);
   const [editName, setEditName] = useState("");
   const [confirmRemove, setConfirmRemove] = useState(null);
+  const [modoMasivo, setModoMasivo] = useState(false);
+  const [seleccionados, setSeleccionados] = useState(() => new Set());
+  const [mensajeMasivo, setMensajeMasivo] = useState("Hola {nombre}, te escribo de parte de NutryEasy para tu seguimiento nutricional. 🥗");
+  const [colaEnvio, setColaEnvio] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1587,13 +1591,92 @@ function PatientList({ user, onOpen, busqueda, setBusqueda, abrirFormExterno }) 
             Regístralos tú mismo, o comparte tu usuario (<code style={{ background: T.bg, padding: "2px 6px", borderRadius: 4 }}>{user.username}</code>) para que se registren ellos.
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {patients.length > 0 && (
-            <Button variant="ghost" onClick={exportarExcel}><FileDown size={15} /> Exportar Excel</Button>
+            <>
+              <Button variant="ghost" onClick={exportarExcel}><FileDown size={15} /> Exportar Excel</Button>
+              <Button variant="ghost" onClick={() => { setModoMasivo((v) => !v); setSeleccionados(new Set()); setColaEnvio(null); }}>
+                <MessageCircle size={15} color="#25D366" /> {modoMasivo ? "Cancelar envío masivo" : "Mensaje masivo"}
+              </Button>
+            </>
           )}
           {!showForm && <Button onClick={() => setShowForm(true)}><Plus size={15} /> Nuevo paciente</Button>}
         </div>
       </div>
+
+      {modoMasivo && (
+        <Card style={{ marginBottom: 20 }}>
+          <div style={{ fontFamily: "Fraunces, serif", fontSize: 16, fontWeight: 600, marginBottom: 10 }}>Enviar mensaje a varios pacientes</div>
+          <p style={{ fontSize: 12, color: T.inkSoft, marginTop: 0, marginBottom: 12 }}>
+            Marca a quiénes les quieres escribir, escribe el mensaje, y dale "Enviar". Se va abriendo WhatsApp uno por uno — tú confirmas cada envío, para que ningún mensaje salga sin que tú lo veas.
+          </p>
+          <div style={{ display: "flex", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
+            <button
+              onClick={() => setSeleccionados(new Set(patients.filter((p) => p.activo).map((p) => p.username)))}
+              style={{ background: "none", border: "none", color: T.brand, fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}
+            >
+              Seleccionar todos
+            </button>
+            <button
+              onClick={() => setSeleccionados(new Set())}
+              style={{ background: "none", border: "none", color: T.inkSoft, fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}
+            >
+              Quitar selección
+            </button>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14, maxHeight: 160, overflowY: "auto" }}>
+            {patients.filter((p) => p.activo).map((p) => (
+              <label
+                key={p.username}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 999,
+                  border: `1px solid ${seleccionados.has(p.username) ? T.brand : T.line}`,
+                  background: seleccionados.has(p.username) ? T.brandSoft : T.surface,
+                  fontSize: 12.5, cursor: "pointer",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={seleccionados.has(p.username)}
+                  onChange={(e) => {
+                    const next = new Set(seleccionados);
+                    if (e.target.checked) next.add(p.username); else next.delete(p.username);
+                    setSeleccionados(next);
+                  }}
+                />
+                {p.name}
+              </label>
+            ))}
+          </div>
+          <Field label="Mensaje (puedes usar {nombre})">
+            <textarea style={{ ...inputStyle, minHeight: 60, resize: "vertical" }} value={mensajeMasivo} onChange={(e) => setMensajeMasivo(e.target.value)} />
+          </Field>
+
+          {!colaEnvio ? (
+            <Button onClick={() => setColaEnvio({ lista: patients.filter((p) => seleccionados.has(p.username)), i: 0 })} disabled={seleccionados.size === 0}>
+              <MessageCircle size={15} /> Enviar a {seleccionados.size} paciente{seleccionados.size === 1 ? "" : "s"}
+            </Button>
+          ) : colaEnvio.i >= colaEnvio.lista.length ? (
+            <div style={{ padding: 12, borderRadius: 10, background: T.brandSoft, color: T.brandDark, fontWeight: 600, fontSize: 13 }}>
+              ¡Listo! Terminaste de enviar a los {colaEnvio.lista.length} pacientes seleccionados.
+            </div>
+          ) : (
+            <div style={{ padding: 12, borderRadius: 10, background: T.bg }}>
+              <div style={{ fontSize: 13, marginBottom: 8 }}>
+                Siguiente ({colaEnvio.i + 1}/{colaEnvio.lista.length}): <strong>{colaEnvio.lista[colaEnvio.i].name}</strong>
+              </div>
+              <a
+                href={waLink(colaEnvio.lista[colaEnvio.i].username, interpolarPlantilla(mensajeMasivo, { nombre: colaEnvio.lista[colaEnvio.i].name.split(" ")[0] }))}
+                target="_blank" rel="noopener noreferrer"
+                onClick={() => setTimeout(() => setColaEnvio((c) => ({ ...c, i: c.i + 1 })), 400)}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 16px", borderRadius: 8, background: T.brand, color: "#fff", fontWeight: 600, fontSize: 13.5, textDecoration: "none" }}
+              >
+                <MessageCircle size={14} /> Abrir WhatsApp y continuar
+              </a>
+            </div>
+          )}
+        </Card>
+      )}
 
       {showForm && <NuevoPacienteForm user={user} onDone={() => { setShowForm(false); load(); }} />}
 
@@ -3661,12 +3744,12 @@ function ConfiguracionCuenta({ user, onUpdateUser }) {
     setTimeout(() => setSavedReglas(false), 1600);
   };
 
-  const agregarRegla = () => {
-    guardarReglas([...reglas, {
-      id: `regla-${Date.now()}`, nombre: "Nueva regla", activo: true,
-      disparador: "antes_cita", horasAntes: 24,
-      mensaje: "Hola {nombre}, te recordamos tu cita el {fecha} a las {hora}, con {nutriologo}.",
-    }]);
+  const agregarRegla = (tipo = "antes_cita") => {
+    const base = { id: `regla-${Date.now()}`, activo: true, disparador: tipo };
+    const nueva = tipo === "antes_cita"
+      ? { ...base, nombre: "Nueva regla", horasAntes: 24, mensaje: "Hola {nombre}, te recordamos tu cita el {fecha} a las {hora}, con {nutriologo}." }
+      : { ...base, nombre: "Paciente inactivo", diasSinAsistir: 30, mensaje: "Hola {nombre}, hace tiempo no te vemos por el consultorio. ¿Agendamos tu próxima cita? — {nutriologo}" };
+    guardarReglas([...reglas, nueva]);
   };
 
   const actualizarRegla = (id, cambios) => {
@@ -3850,7 +3933,10 @@ function ConfiguracionCuenta({ user, onUpdateUser }) {
         <Card style={{ gridColumn: "1 / -1" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
             <div style={{ fontFamily: "Fraunces, serif", fontSize: 16, fontWeight: 600 }}>Recordatorios automáticos por WhatsApp</div>
-            <Button variant="ghost" onClick={agregarRegla}><Plus size={14} /> Nueva regla</Button>
+            <div style={{ display: "flex", gap: 6 }}>
+              <Button variant="ghost" onClick={() => agregarRegla("antes_cita")}><Plus size={14} /> Antes de cita</Button>
+              <Button variant="ghost" onClick={() => agregarRegla("inactividad")}><Plus size={14} /> Por inactividad</Button>
+            </div>
           </div>
           <p style={{ fontSize: 12, color: T.inkSoft, marginTop: 0, marginBottom: 16 }}>
             Estas reglas se envían solas, sin que nadie tenga que abrir WhatsApp — pero solo funcionan una vez que conectes tu número de WhatsApp Business (ve la guía abajo). Variables: <code style={{ background: T.bg, padding: "1px 5px", borderRadius: 4 }}>{"{nombre}"}</code> <code style={{ background: T.bg, padding: "1px 5px", borderRadius: 4 }}>{"{fecha}"}</code> <code style={{ background: T.bg, padding: "1px 5px", borderRadius: 4 }}>{"{hora}"}</code> <code style={{ background: T.bg, padding: "1px 5px", borderRadius: 4 }}>{"{nutriologo}"}</code>
@@ -3873,16 +3959,34 @@ function ConfiguracionCuenta({ user, onUpdateUser }) {
                     <Trash2 size={15} />
                   </button>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, fontSize: 13 }}>
-                  <span style={{ color: T.inkSoft }}>Enviar</span>
-                  <input
-                    type="number"
-                    style={{ ...inputStyle, width: 70 }}
-                    value={r.horasAntes}
-                    onChange={(e) => actualizarRegla(r.id, { horasAntes: Number(e.target.value) })}
-                  />
-                  <span style={{ color: T.inkSoft }}>horas antes de cada cita</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", padding: "2px 8px", borderRadius: 999, background: r.disparador === "inactividad" ? "#FDF1E0" : T.brandSoft, color: r.disparador === "inactividad" ? T.accent : T.brand }}>
+                    {r.disparador === "inactividad" ? "Por inactividad" : "Antes de cita"}
+                  </span>
                 </div>
+                {r.disparador === "inactividad" ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, fontSize: 13, flexWrap: "wrap" }}>
+                    <span style={{ color: T.inkSoft }}>Enviar si el paciente lleva</span>
+                    <input
+                      type="number"
+                      style={{ ...inputStyle, width: 70 }}
+                      value={r.diasSinAsistir}
+                      onChange={(e) => actualizarRegla(r.id, { diasSinAsistir: Number(e.target.value) })}
+                    />
+                    <span style={{ color: T.inkSoft }}>días sin una cita (se revisa cada semana)</span>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, fontSize: 13 }}>
+                    <span style={{ color: T.inkSoft }}>Enviar</span>
+                    <input
+                      type="number"
+                      style={{ ...inputStyle, width: 70 }}
+                      value={r.horasAntes}
+                      onChange={(e) => actualizarRegla(r.id, { horasAntes: Number(e.target.value) })}
+                    />
+                    <span style={{ color: T.inkSoft }}>horas antes de cada cita</span>
+                  </div>
+                )}
                 <textarea
                   style={{ ...inputStyle, minHeight: 56, resize: "vertical" }}
                   value={r.mensaje}
