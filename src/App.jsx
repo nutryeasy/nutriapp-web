@@ -1802,8 +1802,10 @@ function PatientDetail({ patientUsername, onBack, nutriUser, initialTab, onTabCh
     setSubiendoFoto(true);
     try {
       const dataUrl = await resizeImageToDataUrl(file, 500);
-      const entry = { id: Date.now(), fecha: new Date().toISOString().slice(0, 10), angulo, foto: dataUrl };
-      const updated = [entry, ...fotosProgreso];
+      const hoyStr = new Date().toISOString().slice(0, 10);
+      const entry = { id: Date.now(), fecha: hoyStr, angulo, foto: dataUrl };
+      const sinDuplicado = fotosProgreso.filter((f) => !(f.angulo === angulo && f.fecha === hoyStr));
+      const updated = [entry, ...sinDuplicado];
       setFotosProgreso(updated);
       await sSet(`fotosProgreso:${nutriUser.username}:${patientUsername}`, updated);
     } finally {
@@ -2064,41 +2066,83 @@ function PatientDetail({ patientUsername, onBack, nutriUser, initialTab, onTabCh
             {/* Columna derecha: fotos, evolución, acciones rápidas */}
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <Card>
-                <div style={{ fontFamily: "Fraunces, serif", fontSize: 14.5, fontWeight: 600, marginBottom: 12 }}>10. Fotografías de progreso</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 10 }}>
-                  {["Frente", "Perfil", "Espalda"].map((angulo) => {
-                    const foto = fotosProgreso.find((f) => f.angulo === angulo);
-                    const inputId = `foto-${angulo}-${patientUsername}`;
-                    return (
-                      <div key={angulo} style={{ textAlign: "center" }}>
-                        <div style={{ fontSize: 10, color: T.inkSoft, marginBottom: 4 }}>{angulo}</div>
-                        <label htmlFor={inputId} style={{ display: "block", cursor: "pointer" }}>
-                          {foto ? (
-                            <img src={foto.foto} alt={angulo} style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", borderRadius: 8 }} />
-                          ) : (
-                            <div style={{ width: "100%", aspectRatio: "3/4", borderRadius: 8, background: T.bg, border: `1px dashed ${T.line}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                              <Camera size={16} color={T.inkSoft} />
+                <div style={{ fontFamily: "Fraunces, serif", fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>10. Fotografías de progreso</div>
+                <p style={{ fontSize: 11, color: T.inkSoft, marginTop: 0, marginBottom: 12 }}>Sube fotos en cada sesión para comparar el avance visual con el tiempo.</p>
+
+                {(() => {
+                  const hoyStr = new Date().toISOString().slice(0, 10);
+                  const sesionesPasadas = {};
+                  fotosProgreso.forEach((f) => {
+                    if (f.fecha === hoyStr) return;
+                    if (!sesionesPasadas[f.fecha]) sesionesPasadas[f.fecha] = [];
+                    sesionesPasadas[f.fecha].push(f);
+                  });
+                  const fechasOrdenadas = Object.keys(sesionesPasadas).sort((a, b) => b.localeCompare(a));
+
+                  return (
+                    <>
+                      <div style={{ fontSize: 10.5, fontWeight: 700, color: T.brand, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 8 }}>
+                        Sesión de hoy · {new Date().toLocaleDateString("es-MX", { day: "numeric", month: "short" })}
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 14 }}>
+                        {["Frente", "Perfil", "Espalda"].map((angulo) => {
+                          const foto = fotosProgreso.find((f) => f.angulo === angulo && f.fecha === hoyStr);
+                          const inputId = `foto-${angulo}-${patientUsername}`;
+                          return (
+                            <div key={angulo} style={{ textAlign: "center" }}>
+                              <div style={{ fontSize: 10, color: T.inkSoft, marginBottom: 4 }}>{angulo}</div>
+                              <label htmlFor={inputId} style={{ display: "block", cursor: "pointer", position: "relative" }}>
+                                {foto ? (
+                                  <img src={foto.foto} alt={angulo} style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", borderRadius: 8 }} />
+                                ) : (
+                                  <div style={{ width: "100%", aspectRatio: "3/4", borderRadius: 8, background: T.bg, border: `1px dashed ${T.line}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                    <Camera size={16} color={T.inkSoft} />
+                                  </div>
+                                )}
+                                {foto && (
+                                  <div style={{ position: "absolute", bottom: 3, right: 3, background: T.brand, borderRadius: "50%", width: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                    <Check size={10} color="#fff" />
+                                  </div>
+                                )}
+                              </label>
+                              <input id={inputId} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => subirFotoProgreso(e.target.files?.[0], angulo)} />
                             </div>
-                          )}
-                        </label>
-                        <input id={inputId} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => subirFotoProgreso(e.target.files?.[0], angulo)} />
+                          );
+                        })}
                       </div>
-                    );
-                  })}
-                </div>
-                {fotosProgreso.length > 0 && (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
-                    {fotosProgreso.slice(0, 6).map((f) => (
-                      <div key={f.id} style={{ position: "relative" }}>
-                        <img src={f.foto} alt={f.angulo} style={{ width: 34, height: 34, objectFit: "cover", borderRadius: 6 }} title={`${f.angulo} · ${f.fecha}`} />
-                        <button onClick={() => eliminarFotoProgreso(f.id)} style={{ position: "absolute", top: -4, right: -4, width: 14, height: 14, borderRadius: "50%", background: T.accent2, border: "1.5px solid #fff", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}>
-                          <X size={9} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div style={{ fontSize: 11, color: T.inkSoft }}>{subiendoFoto ? "Subiendo…" : "Toca un recuadro para subir una foto."}</div>
+
+                      {fechasOrdenadas.length > 0 && (
+                        <>
+                          <div style={{ fontSize: 10.5, fontWeight: 700, color: T.inkSoft, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 8, borderTop: `1px solid ${T.line}`, paddingTop: 12 }}>
+                            Sesiones anteriores
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 12, maxHeight: 280, overflowY: "auto" }}>
+                            {fechasOrdenadas.map((fecha) => (
+                              <div key={fecha}>
+                                <div style={{ fontSize: 11.5, color: T.ink, fontWeight: 600, marginBottom: 6, fontFamily: "IBM Plex Mono, monospace" }}>{fecha}</div>
+                                <div style={{ display: "flex", gap: 6 }}>
+                                  {sesionesPasadas[fecha].map((f) => (
+                                    <div key={f.id} style={{ position: "relative" }}>
+                                      <img src={f.foto} alt={f.angulo} style={{ width: 52, height: 68, objectFit: "cover", borderRadius: 6 }} title={f.angulo} />
+                                      <button
+                                        onClick={() => eliminarFotoProgreso(f.id)}
+                                        style={{ position: "absolute", top: -4, right: -4, width: 15, height: 15, borderRadius: "50%", background: T.accent2, border: "1.5px solid #fff", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}
+                                      >
+                                        <X size={9} />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </>
+                  );
+                })()}
+
+                <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 12 }}>{subiendoFoto ? "Subiendo…" : "Toca un recuadro para subir una foto de la sesión de hoy."}</div>
               </Card>
 
               <Card>
